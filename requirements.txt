@@ -1,0 +1,30 @@
+# Pocket Option Trading Bot Dependencies
+
+# Numerical computations
+numpy>=1.21.0
+
+# WebSocket client
+websockets>=10.0
+
+# Async HTTP client
+aiohttp>=3.8.0
+
+# JSON handling (included in Python 3)
+# json
+
+# Logging (included in Python 3)
+# logging
+
+# DateTime (included in Python 3)
+# datetime
+
+# Optional: For enhanced technical analysis
+numpy>=1.21.0
+pandas>=1.3.0
+
+# Optional: For better async performance
+uvloop>=0.16.0; sys.platform != 'win32'
+
+# Optional: For encrypted credential storage
+cryptography>=37.0.0
+
