@@ -374,9 +374,15 @@ def start():
     return redirect('/')
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description='Pocket Option Bot GUI')
+    parser.add_argument('--host', default='0.0.0.0', help='Host to bind to (default: 0.0.0.0)')
+    parser.add_argument('--port', type=int, default=5000, help='Port to bind to (default: 5000)')
+    args = parser.parse_args()
+    
     print("=" * 50)
     print("🎛️  Pocket Option Bot - Configuration UI")
     print("=" * 50)
-    print("Open your browser and go to: http://localhost:5000")
+    print(f"Open your browser and go to: http://{args.host}:{args.port}")
     print("=" * 50)
-    app.run(debug=True, port=5000)
+    app.run(host=args.host, port=args.port, debug=True)

@@ -38,11 +38,21 @@ class PocketOptionReal:
             from selenium.webdriver.support import expected_conditions as EC
             from selenium.webdriver.chrome.options import Options
             from selenium.webdriver.chrome.service import Service
+            import os
             
             # Setup Chrome options
             chrome_options = Options()
-            if self.headless:
-                chrome_options.add_argument("--headless")
+            
+            # Check if running on headless server (no display)
+            if os.environ.get('DISPLAY') is None and os.environ.get('WAYLAND_DISPLAY') is None:
+                # No display available - use headless mode
+                chrome_options.add_argument("--headless=new")
+                logger.info("Running in headless mode (no display detected)")
+            elif self.headless:
+                # User explicitly requested headless
+                chrome_options.add_argument("--headless=new")
+            
+            # Essential options for servers
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-gpu")
@@ -50,9 +60,20 @@ class PocketOptionReal:
             chrome_options.add_argument("--disable-blink-features=AutomationControlled")
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
+            chrome_options.add_argument("--disable-setuid-sandbox")
+            chrome_options.add_argument("--remote-debugging-port=9222")
             
-            # Initialize driver
-            self.driver = webdriver.Chrome(options=chrome_options)
+            try:
+                # Try regular Chrome
+                self.driver = webdriver.Chrome(options=chrome_options)
+            except:
+                # Try Chromium if Chrome fails
+                try:
+                    chrome_options.binary_location = "/usr/bin/chromium"
+                    self.driver = webdriver.Chrome(options=chrome_options)
+                except:
+                    chrome_options.binary_location = "/usr/bin/chromium-browser"
+                    self.driver = webdriver.Chrome(options=chrome_options)
             
             # Execute stealth script
             self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
