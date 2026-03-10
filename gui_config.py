@@ -12,7 +12,7 @@ CONFIG_FILE = 'bot_config.json'
 # Default configuration
 DEFAULT_CONFIG = {
     # Login Mode
-    "DEMO_MODE": True,
+    "demo": True,
     "USE_BROWSER_LOGIN": True,
     "POCKET_OPTION_EMAIL": "",
     "POCKET_OPTION_PASSWORD": "",
@@ -192,19 +192,20 @@ HTML_TEMPLATE = '''
             <!-- Status Bar -->
             <div class="status-bar">
                 <div>
-                    <span class="status-indicator {% if config.DEMO_MODE %}status-active{% endif %}"></span>
-                    <span>Mode: <strong>{% if config.DEMO_MODE %}DEMO{% else %}REAL TRADING{% endif %}</strong></span>
-                    {% if config.DEMO_MODE %}
+                    <span class="status-indicator {% if config.demo %}status-active{% endif %}"></span>
+                    <span>Mode: <strong>{% if config.demo %}DEMO{% else %}REAL TRADING{% endif %}</strong></span>
+                    {% if config.demo %}
                     <span class="demo-badge">SIMULATION</span>
                     {% endif %}
                 </div>
+            </div>
             
             <!-- Login Settings -->
             <div class="card">
                 <h2>🔐 Login Settings</h2>
                 <div class="form-group checkbox-group">
-                    <input type="checkbox" id="DEMO_MODE" name="DEMO_MODE" {% if config.DEMO_MODE %}checked{% endif %}>
-                    <label for="DEMO_MODE">Demo Mode (Use simulation instead of real trading)</label>
+                    <input type="checkbox" id="demo" name="demo" {% if config.demo %}checked{% endif %}>
+                    <label for="demo">Use Demo Account (Uncheck for Real Trading with real money)</label>
                 </div>
                 <div class="form-group">
                     <label>Email</label>
@@ -317,9 +318,26 @@ def load_config():
     return DEFAULT_CONFIG.copy()
 
 def save_config(config):
-    """Save configuration to file"""
+    """Save configuration to file (with key names matching main.py)"""
+    # Map GUI field names to main.py expected names
+    mapped_config = {
+        'demo': config.get('DEMO_MODE', True),
+        'email': config.get('POCKET_OPTION_EMAIL', ''),
+        'password': config.get('POCKET_OPTION_PASSWORD', ''),
+        'browser_auth': config.get('USE_BROWSER_LOGIN', True),
+        'asset': config.get('DEFAULT_ASSET', 'EUR/USD'),
+        'amount': int(config.get('TRADING_AMOUNT', 10)),
+        'expiry': int(config.get('TRADE_EXPIRY', 60)),
+        'max_daily_loss': int(config.get('MAX_DAILY_LOSS', 100)),
+        'max_trades_per_day': int(config.get('MAX_TRADES_PER_DAY', 50)),
+        'min_win_rate': float(config.get('MIN_WIN_RATE', 0.6)),
+        'signal_check_interval': int(config.get('SIGNAL_CHECK_INTERVAL', 10)),
+        'martingale_enabled': config.get('MARTINGALE_ENABLED', True),
+        'martingale_multiplier': float(config.get('MARTINGALE_MULTIPLIER', 2.0)),
+        'max_martingale_steps': int(config.get('MAX_MARTINGALE_STEPS', 3)),
+    }
     with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=4)
+        json.dump(mapped_config, f, indent=4)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -327,8 +345,8 @@ def index():
     all_assets = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD", "EUR/GBP", "EUR/JPY", "GBP/JPY", "BTC/USD", "ETH/USD"]
     
     if request.method == 'POST':
-        # Update config from form
-        config['DEMO_MODE'] = 'DEMO_MODE' in request.form
+        # Update config from form - use 'demo' key consistently
+        config['demo'] = 'demo' in request.form
         config['USE_BROWSER_LOGIN'] = 'USE_BROWSER_LOGIN' in request.form
         config['POCKET_OPTION_EMAIL'] = request.form.get('POCKET_OPTION_EMAIL', '')
         config['POCKET_OPTION_PASSWORD'] = request.form.get('POCKET_OPTION_PASSWORD', '')

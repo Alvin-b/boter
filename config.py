@@ -20,8 +20,9 @@ import os
 # LOGIN MODE SETTINGS
 # ============================================
 
-# Set to True for demo mode (simulated trades - RECOMMENDED)
-DEMO_MODE = True
+# Set to False for real trading (will execute trades on real Pocket Option account)
+# IMPORTANT: Make sure you have a Pocket Option account and understand the risks
+DEMO_MODE = False
 
 # Set to True to use browser login flow  
 USE_BROWSER_LOGIN = True
@@ -30,6 +31,10 @@ USE_BROWSER_LOGIN = True
 # Set via: set POCKET_OPTION_EMAIL=your@email.com
 POCKET_OPTION_EMAIL = os.getenv('POCKET_OPTION_EMAIL', '')
 POCKET_OPTION_PASSWORD = os.getenv('POCKET_OPTION_PASSWORD', '')
+
+# Demo and browser auth settings (used by main.py)
+POCKET_OPTION_DEMO_ACCOUNT = DEMO_MODE
+POCKET_OPTION_BROWSER_AUTH = USE_BROWSER_LOGIN
 
 # ============================================
 # TRADING SETTINGS

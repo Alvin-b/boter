@@ -1,0 +1,16 @@
+{
+    "demo": true,
+    "email": "",
+    "password": "",
+    "browser_auth": true,
+    "asset": "EUR/USD",
+    "amount": 10,
+    "expiry": 60,
+    "max_daily_loss": 100,
+    "max_trades_per_day": 50,
+    "min_win_rate": 0.6,
+    "signal_check_interval": 10,
+    "martingale_enabled": true,
+    "martingale_multiplier": 2.0,
+    "max_martingale_steps": 3
+}

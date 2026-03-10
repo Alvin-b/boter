@@ -19,10 +19,11 @@ logger = logging.getLogger(__name__)
 class PocketOptionReal:
     """Real Pocket Option trading via browser automation"""
     
-    def __init__(self, email, password, headless=False):
+    def __init__(self, email, password, headless=False, use_demo=True):
         self.email = email
         self.password = password
         self.headless = headless
+        self.use_demo = use_demo  # If True, use Pocket Option's demo account
         self.driver = None
         self.is_logged_in = False
         self.balance = 0
@@ -62,8 +63,14 @@ class PocketOptionReal:
                 '''
             })
             
-            logger.info("Browser initialized, navigating to Pocket Option...")
-            self.driver.get("https://pocketoption.com/")
+            if self.use_demo:
+                # Go directly to demo trading
+                logger.info("Navigating to Pocket Option demo trading...")
+                self.driver.get("https://pocketoption.com/en/demo-trading/")
+            else:
+                # Go to main site
+                logger.info("Navigating to Pocket Option...")
+                self.driver.get("https://pocketoption.com/")
             
             return True
             
@@ -75,7 +82,7 @@ class PocketOptionReal:
             return False
     
     async def authenticate(self):
-        """Login to Pocket Option"""
+        """Login to Pocket Option - supports both demo and real accounts"""
         if not self.driver:
             return False
             
@@ -86,45 +93,70 @@ class PocketOptionReal:
             
             wait = WebDriverWait(self.driver, 20)
             
-            # Click login button - try multiple selectors
-            try:
-                login_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Login')]")))
-                login_btn.click()
-            except:
-                # Try alternative
-                login_link = self.driver.find_elements(By.XPATH, "//a[contains(text(),'Login')]")
-                if login_link:
-                    login_link[0].click()
+            # If using demo account, try to click "Try Demo" button first
+            if self.use_demo:
+                try:
+                    # Look for Demo button/link
+                    demo_xpaths = [
+                        "//a[contains(text(),'Demo')]",
+                        "//button[contains(text(),'Demo')]",
+                        "//span[contains(text(),'Demo')]",
+                        "//div[contains(@class,'demo')]//a",
+                        "//a[contains(@href,'demo')]"
+                    ]
+                    for xpath in demo_xpaths:
+                        try:
+                            demo_btn = wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
+                            demo_btn.click()
+                            logger.info("Clicked Demo button")
+                            await asyncio.sleep(3)
+                            break
+                        except:
+                            continue
+                except Exception as e:
+                    logger.warning(f"Could not find Demo button: {e}")
             
-            # Wait for login modal
-            await asyncio.sleep(2)
-            
-            # Enter email
-            try:
-                email_input = wait.until(EC.presence_of_element_located((By.NAME, "email")))
-                email_input.clear()
-                email_input.send_keys(self.email)
-            except:
-                # Try alternative selector
-                email_input = self.driver.find_element(By.XPATH, "//input[@type='email']")
-                email_input.clear()
-                email_input.send_keys(self.email)
-            
-            # Enter password
-            password_input = self.driver.find_element(By.NAME, "password")
-            password_input.clear()
-            password_input.send_keys(self.password)
-            
-            # Click submit
-            submit_btn = self.driver.find_element(By.XPATH, "//button[@type='submit']")
-            submit_btn.click()
-            
-            # Wait for login to complete
-            await asyncio.sleep(5)
+            # If we have credentials, try to login
+            if self.email and self.password:
+                # Click login button - try multiple selectors
+                try:
+                    login_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Login')]")))
+                    login_btn.click()
+                except:
+                    # Try alternative
+                    login_link = self.driver.find_elements(By.XPATH, "//a[contains(text(),'Login')]")
+                    if login_link:
+                        login_link[0].click()
+                
+                # Wait for login modal
+                await asyncio.sleep(2)
+                
+                # Enter email
+                try:
+                    email_input = wait.until(EC.presence_of_element_located((By.NAME, "email")))
+                    email_input.clear()
+                    email_input.send_keys(self.email)
+                except:
+                    # Try alternative selector
+                    email_input = self.driver.find_element(By.XPATH, "//input[@type='email']")
+                    email_input.clear()
+                    email_input.send_keys(self.email)
+                
+                # Enter password
+                password_input = self.driver.find_element(By.NAME, "password")
+                password_input.clear()
+                password_input.send_keys(self.password)
+                
+                # Click submit
+                submit_btn = self.driver.find_element(By.XPATH, "//button[@type='submit']")
+                submit_btn.click()
+                
+                # Wait for login to complete
+                await asyncio.sleep(5)
             
             # Check if logged in
             current_url = self.driver.current_url
-            if "dashboard" in current_url or "trade" in current_url or "cabinet" in current_url:
+            if "dashboard" in current_url or "trade" in current_url or "cabinet" in current_url or "demo" in current_url:
                 self.is_logged_in = True
                 logger.info("Successfully logged in to Pocket Option")
                 await self.get_balance()
