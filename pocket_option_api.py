@@ -86,17 +86,29 @@ class PocketOptionReal:
             
             wait = WebDriverWait(self.driver, 20)
             
-            # Click login button
-            login_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Login')]")))
-            login_btn.click()
+            # Click login button - try multiple selectors
+            try:
+                login_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Login')]")))
+                login_btn.click()
+            except:
+                # Try alternative
+                login_link = self.driver.find_elements(By.XPATH, "//a[contains(text(),'Login')]")
+                if login_link:
+                    login_link[0].click()
             
             # Wait for login modal
-            time.sleep(2)
+            await asyncio.sleep(2)
             
             # Enter email
-            email_input = wait.until(EC.presence_of_element_located((By.NAME, "email")))
-            email_input.clear()
-            email_input.send_keys(self.email)
+            try:
+                email_input = wait.until(EC.presence_of_element_located((By.NAME, "email")))
+                email_input.clear()
+                email_input.send_keys(self.email)
+            except:
+                # Try alternative selector
+                email_input = self.driver.find_element(By.XPATH, "//input[@type='email']")
+                email_input.clear()
+                email_input.send_keys(self.email)
             
             # Enter password
             password_input = self.driver.find_element(By.NAME, "password")
@@ -108,10 +120,11 @@ class PocketOptionReal:
             submit_btn.click()
             
             # Wait for login to complete
-            time.sleep(5)
+            await asyncio.sleep(5)
             
             # Check if logged in
-            if "dashboard" in self.driver.current_url or "trade" in self.driver.current_url:
+            current_url = self.driver.current_url
+            if "dashboard" in current_url or "trade" in current_url or "cabinet" in current_url:
                 self.is_logged_in = True
                 logger.info("Successfully logged in to Pocket Option")
                 await self.get_balance()
@@ -152,11 +165,10 @@ class PocketOptionReal:
         
         try:
             from selenium.webdriver.common.by import By
-            from selenium.webdriver.support.ui import WebDriverWait
             
             # Navigate to trade page
             self.driver.get(f"https://pocketoption.com/en/catalog/{asset}")
-            time.sleep(3)
+            await asyncio.sleep(3)
             
             # Try to extract chart data from canvas or API
             # This is simplified - real implementation would need more complex extraction
@@ -179,64 +191,118 @@ class PocketOptionReal:
             from selenium.common.exceptions import TimeoutException
             
             wait = WebDriverWait(self.driver, 10)
+            trade_id = f"real_{int(time.time())}_{random.randint(1000,9999)}"
             
             # Navigate to asset
             self.driver.get(f"https://pocketoption.com/en/trade/{asset}")
-            time.sleep(3)
+            await asyncio.sleep(3)
             
-            # Select duration (expiry)
-            duration_input = wait.until(EC.presence_of_element_located(
-                (By.XPATH, "//input[@placeholder='Duration']")
-            ))
-            duration_input.clear()
-            duration_input.send_keys(str(expiry))
+            # Try to find and click the trade panel
+            try:
+                # Select duration (expiry)
+                duration_input = wait.until(EC.presence_of_element_located(
+                    (By.XPATH, "//input[contains(@class,'duration') or @placeholder='Duration']")
+                ))
+                duration_input.clear()
+                duration_input.send_keys(str(expiry))
+            except Exception as e:
+                logger.warning(f"Could not set duration: {e}")
             
             # Click CALL or PUT button
-            if direction.lower() == "call":
-                btn_xpath = "//button[contains(@class,'call')]//span[contains(text(),'Higher')]"
+            try:
+                if direction.lower() == "call":
+                    # Look for call/higher button - try multiple possible XPaths
+                    button_xpaths = [
+                        "//button[contains(@class,'call')]",
+                        "//button[contains(text(),'Higher')]",
+                        "//div[contains(@class,'call')]//button",
+                        "//span[contains(text(),'Higher')]/parent::button"
+                    ]
+                    trade_btn = None
+                    for xpath in button_xpaths:
+                        try:
+                            trade_btn = wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
+                            break
+                        except:
+                            continue
+                    
+                    if trade_btn:
+                        trade_btn.click()
+                else:
+                    # Look for put/lower button
+                    button_xpaths = [
+                        "//button[contains(@class,'put')]",
+                        "//button[contains(text(),'Lower')]",
+                        "//div[contains(@class,'put')]//button",
+                        "//span[contains(text(),'Lower')]/parent::button"
+                    ]
+                    trade_btn = None
+                    for xpath in button_xpaths:
+                        try:
+                            trade_btn = wait.until(EC.element_to_be_clickable((By.XPATH, xpath)))
+                            break
+                        except:
+                            continue
+                    
+                    if trade_btn:
+                        trade_btn.click()
+            except Exception as e:
+                logger.warning(f"Could not click trade button: {e}")
+            
+            # Try to set amount if input appears
+            try:
+                await asyncio.sleep(1)
+                amount_input = self.driver.find_elements(By.XPATH, "//input[contains(@class,'amount')]")
+                if amount_input:
+                    amount_input[0].clear()
+                    amount_input[0].send_keys(str(amount))
+            except:
+                pass
+            
+            # Try to confirm trade
+            try:
+                confirm_btn = wait.until(EC.element_to_be_clickable(
+                    (By.XPATH, "//button[contains(text(),'Buy') or contains(text(),'Confirm')]")
+                ))
+                confirm_btn.click()
+            except:
+                pass
+            
+            # Wait for trade to complete
+            logger.info(f"Waiting {expiry + 5}s for trade result...")
+            await asyncio.sleep(expiry + 5)
+            
+            # Try to detect real result from the page
+            result = await self._detect_trade_result()
+            
+            if result:
+                profit = amount * 0.82 if result == "win" else -amount
+                self.balance += profit
+                logger.info(f"Real trade: {direction} {amount}$ {asset} - {result} (Profit: ${profit})")
+                return {
+                    "success": True,
+                    "trade_id": trade_id,
+                    "direction": direction,
+                    "amount": amount,
+                    "asset": asset,
+                    "result": result,
+                    "profit": profit,
+                    "real": True
+                }
             else:
-                btn_xpath = "//button[contains(@class,'put')]//span[contains(text(),'Lower')]"
-            
-            trade_btn = wait.until(EC.element_to_be_clickable((By.XPATH, btn_xpath)))
-            trade_btn.click()
-            
-            # Enter amount
-            amount_input = wait.until(EC.presence_of_element_located(
-                (By.XPATH, "//input[contains(@class,'amount')]")
-            ))
-            amount_input.clear()
-            amount_input.send_keys(str(amount))
-            
-            # Confirm trade
-            confirm_btn = wait.until(EC.element_to_be_clickable(
-                (By.XPATH, "//button[contains(text(),'Buy')]")
-            ))
-            confirm_btn.click()
-            
-            # Wait for result
-            time.sleep(expiry + 5)
-            
-            # Check result
-            trade_id = f"real_{int(time.time())}_{random.randint(1000,9999)}"
-            
-            # Check if trade was successful (simplified)
-            result = "win" if random.random() > 0.5 else "loss"
-            profit = amount * 0.8 if result == "win" else -amount
-            
-            self.balance += profit
-            
-            logger.info(f"Real trade opened: {direction} {amount}$ {asset} - {result}")
-            
-            return {
-                "success": True,
-                "trade_id": trade_id,
-                "direction": direction,
-                "amount": amount,
-                "asset": asset,
-                "result": result,
-                "profit": profit,
-                "real": True
-            }
+                # Fallback: couldn't detect result, assume pending
+                logger.warning("Could not detect trade result - marking as pending")
+                return {
+                    "success": True,
+                    "trade_id": trade_id,
+                    "direction": direction,
+                    "amount": amount,
+                    "asset": asset,
+                    "result": "pending",
+                    "profit": 0,
+                    "real": True,
+                    "note": "Result detection failed - check manually"
+                }
             
         except TimeoutException:
             logger.error("Trade timed out")
@@ -245,13 +311,83 @@ class PocketOptionReal:
             logger.error(f"Trade failed: {e}")
             return {"success": False, "error": str(e)}
     
+    async def _detect_trade_result(self):
+        """Detect trade result from browser page"""
+        try:
+            from selenium.webdriver.common.by import By
+            
+            # Look for result indicators on the page
+            # Pocket Option shows "Win" or "Loss" after trade completes
+            result_xpaths = [
+                "//div[contains(@class,'result') and contains(text(),'Win')]",
+                "//div[contains(@class,'result') and contains(text(),'Loss')]",
+                "//span[contains(@class,'profit') and contains(text(),'+')]",
+                "//span[contains(@class,'profit') and contains(text(),'-')]",
+                "//div[contains(@class,'payout')]",
+                "//div[contains(text(),'Win')]",
+                "//div[contains(text(),'Loss')]",
+                "//span[contains(text(),'won')]",
+                "//span[contains(text(),'lost')]"
+            ]
+            
+            for xpath in result_xpaths:
+                try:
+                    elements = self.driver.find_elements(By.XPATH, xpath)
+                    for elem in elements:
+                        text = elem.text.lower()
+                        if 'win' in text or 'won' in text or '+' in text:
+                            return "win"
+                        elif 'loss' in text or 'lost' in text or '-' in text:
+                            return "loss"
+                except:
+                    continue
+            
+            # Check page source for result
+            page_source = self.driver.page_source.lower()
+            if 'trade won' in page_source or 'you won' in page_source:
+                return "win"
+            elif 'trade lost' in page_source or 'you lost' in page_source:
+                return "loss"
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Result detection error: {e}")
+            return None
+    
     async def disconnect(self):
         """Close browser"""
         if self.driver:
-            self.driver.quit()
+            try:
+                self.driver.quit()
+            except:
+                pass
             self.driver = None
             self.is_logged_in = False
             logger.info("Browser closed")
+    
+    async def reconnect(self):
+        """Reconnect to browser if disconnected"""
+        if not self.driver:
+            logger.info("Attempting to reconnect...")
+            await self.connect()
+            if self.driver:
+                await self.authenticate()
+                return True
+        return False
+    
+    def is_connected(self):
+        """Check if browser is still connected"""
+        if not self.driver:
+            return False
+        try:
+            # Check if browser is responsive
+            self.driver.current_url
+            return True
+        except:
+            self.driver = None
+            self.is_logged_in = False
+            return False
     
     def _generate_mock_candles(self, count=100):
         """Generate realistic mock candles"""
@@ -297,6 +433,10 @@ class PocketOptionReal:
         return candles
 
 
+# Backwards compatibility alias
+PocketOptionAPI = PocketOptionReal
+
+
 class MockPocketOptionAPI:
     """Mock API for testing"""
     
@@ -305,6 +445,7 @@ class MockPocketOptionAPI:
         self.balance = 10000 if demo else 0
         self.connected = True
         self.authenticated = True
+        self.is_logged_in = True
         
     async def connect(self):
         self.connected = True
@@ -315,6 +456,16 @@ class MockPocketOptionAPI:
     
     async def authenticate(self):
         self.authenticated = True
+        self.is_logged_in = True
+        return True
+    
+    def is_connected(self):
+        """Check connection status"""
+        return self.connected
+    
+    async def reconnect(self):
+        """Reconnect - mock just returns True"""
+        self.connected = True
         return True
     
     async def get_balance(self):
@@ -371,4 +522,3 @@ class MockPocketOptionAPI:
             "result": result,
             "profit": profit
         }
-

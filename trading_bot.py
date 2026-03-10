@@ -41,8 +41,7 @@ class AssetAnalyzer:
                 if not candles or len(candles) < 50:
                     continue
                 
-                signal = self.signal_generator.analyze_market(candles)
-                strength = self.signal_generator.get_signal_strength(candles)
+                signal, strength = self.signal_generator.get_signal_with_strength(candles)
                 
                 volatility = self._calculate_volatility(candles)
                 trend_strength = self._get_trend_strength(candles)
@@ -204,9 +203,31 @@ class TradingBot:
         logger.info("=" * 60 + "\n")
         
         scan_count = 0
+        reconnect_attempts = 0
+        max_reconnect = 3
         
         while self.is_trading:
             try:
+                # Check connection status
+                if hasattr(self.api, 'is_connected') and not self.api.is_connected():
+                    logger.warning("Connection lost, attempting to reconnect...")
+                    if hasattr(self.api, 'reconnect'):
+                        if reconnect_attempts < max_reconnect:
+                            if await self.api.reconnect():
+                                logger.info("Reconnected successfully")
+                                reconnect_attempts = 0
+                            else:
+                                reconnect_attempts += 1
+                                logger.warning(f"Reconnect failed, attempt {reconnect_attempts}/{max_reconnect}")
+                                await asyncio.sleep(30)
+                                continue
+                        else:
+                            logger.error("Max reconnect attempts reached, stopping bot")
+                            break
+                    else:
+                        logger.error("API does not support reconnection")
+                        break
+                
                 if not self.should_trade():
                     await asyncio.sleep(10)
                     continue
@@ -279,11 +300,20 @@ class TradingBot:
             trade_id = result.get('trade_id')
             logger.info(f"Trade opened: {trade_id}")
             
-            await self.process_trade_result(result)
-            self.apply_martingale(result.get('result') == 'win')
-            
+            # Process result if available
+            trade_result = result.get('result')
+            if trade_result and trade_result != 'pending':
+                await self.process_trade_result(result)
+                self.apply_martingale(trade_result == 'win')
+            elif trade_result == 'pending':
+                logger.warning("Trade result pending - will not apply martingale")
+                # Reset martingale on pending trades
+                self.current_amount = self.base_amount
+                self.martingale_step = 0
+            else:
+                logger.warning("Could not determine trade result")
         else:
-            logger.error("Failed to open trade")
+            logger.error(f"Failed to open trade: {result.get('error', 'Unknown error')}")
     
     async def process_trade_result(self, trade_result):
         result = trade_result.get('result', 'win')

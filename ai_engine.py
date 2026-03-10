@@ -1,4 +1,4 @@
-o"""
+"""
 Advanced AI Module for Pocket Option Trading Bot
 Integrates with external AI APIs for enhanced predictions
 """
@@ -9,7 +9,8 @@ import logging
 import time
 import hashlib
 import hmac
-import requests
+import aiohttp
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -32,25 +33,30 @@ class DeepSeekAI:
             recent_prices = [c['close'] for c in candles[-20:]]
             prompt = self._create_analysis_prompt(asset, recent_prices, indicators_data)
             
-            response = requests.post(
-                self.api_url,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": self.model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.3
-                },
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                ai_response = result['choices'][0]['message']['content']
-                return self._parse_ai_response(ai_response)
-            
+            # Use aiohttp for non-blocking HTTP request
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self.api_url,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.3
+                    },
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        ai_response = result['choices'][0]['message']['content']
+                        return self._parse_ai_response(ai_response)
+                    else:
+                        logger.warning(f"DeepSeek API returned status: {response.status}")
+        
+        except asyncio.TimeoutError:
+            logger.error("DeepSeek API request timed out")
         except Exception as e:
             logger.error(f"DeepSeek API error: {e}")
         
